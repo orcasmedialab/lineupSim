@@ -6,30 +6,22 @@ This project simulates baseball games for a single team based on detailed player
 ## Features
 
 *   Simulates games inning by inning for a 9-player lineup.
-*   Calculates plate appearance outcome probabilities (1B, 2B, 3B, HR, BB, HBP, SO, Ground Out, Fly Out) based on input stats.
+*   Calculates Plate Appearance outcome probabilities (1B, 2B, 3B, HR, BB, HBP, SO, Ground Out, Fly Out) based on input stats.
 *   Distinguishes between Ground Outs (GO) and Fly Outs (FO) based on player GB/FB ratios.
-*   Models complex baserunning scenarios:
-    *   Forced advances.
-    *   Double Plays (DP): Configurable attempt probability on GO, batter always out, weighted random choice for runner out.
-    *   Fielder's Choice (FC): Weighted random choice for who is out (batter or runner) on single-out GOs with runners on.
-    *   Sacrifice Flies: Runner on 3rd scores on FO if < 2 outs.
-    *   Extra Base Advancement: Runners attempt extra bases on hits (Singles/Doubles), tagging up on Fly Outs, or advancing on Ground Outs based on their `extra_base_percentage` and base traffic.
-    *   Base Traffic: Runners are held up if the base ahead is occupied.
-    *   Third Out Rule: No runs score on plays where the third out is recorded.
-*   Uses unique Player IDs for lineup management.
+*   Models complex baserunning scenarios, including Forced Advances, Double Plays (DP), Fielder's Choice (FC), Sacrifice Flies, Extra Base Advancement, Base Traffic
 *   Simulates a configurable number of games per run (defined in `config.yaml`).
 *   Flexible output options:
     *   **Verbose Mode:** Logs detailed play-by-play for each simulated game to a YAML file (`logs/simulation_results.yaml` by default).
     *   **CSV Mode:** Logs only the average score for the simulated games, appending a row to a specified CSV file. Ideal for large-scale experiments. Automatically disables verbose YAML logging.
-*   Supports running simulations for:
+*   Supports executing [sets of] simulations for:
     *   A specific lineup order provided via command-line arguments.
     *   The default lineup order defined in `config.yaml` if no specific order is provided.
 *   Includes an orchestrator script (`orchestrator.py`) to automatically simulate all 9! (362,880) possible lineup permutations and aggregate results into a summary CSV file.
 
 ## Directory Structure
 
-
-baseball_simulator/
+```bash
+lineupSim/
 ├── data/ # Input configuration files
 │ └── config.yaml
 ├── logs/ # Output log files (YAML format in verbose mode)
@@ -45,6 +37,7 @@ baseball_simulator/
 ├── requirements.txt # Python dependencies
 ├── all_lineup_results.csv # Example output file from orchestrator.py
 └── README.md # This file
+```
 
 ## Setup
 
@@ -74,7 +67,8 @@ baseball_simulator/
     *   `lineup`: **Acts as a player pool.** A list of 9 players, each with:
         *   `id`: Unique alphanumeric player identifier (e.g., "P001").
         *   `name`: Player's display name.
-        *   `stats`: Dictionary including required metrics (`plate_appearances`, `at_bats`, `hits`, `doubles`, `triples`, `home_runs`, `walks`, `strikeouts`, `hit_by_pitch`, `extra_base_percentage`, `gb_fb_ratio`, etc.). The order in this list defines the *default* lineup if `main.py` is run without the `--lineup` argument.
+        *   `stats`: Dictionary including required metrics (`plate_appearances`, `at_bats`, `hits`, `doubles`, `triples`, `home_runs`, `walks`, `strikeouts`, `hit_by_pitch`, `extra_base_percentage`, `gb_fb_ratio`, etc.). 
+        *   The order in this list defines the *default* lineup if `main.py` is run without the `--lineup` argument.
 
 ## Usage
 
@@ -149,12 +143,33 @@ python orchestrator.py
 
 ## Notes & Future Improvements
 
-*   This simulation focuses solely on the batting team's performance. Opposing pitching and defense are not dynamically factored in beyond the assumed league-average outcomes reflected in the input player stats.
+*   This simulation focuses solely on the batting team's performance. Opposing pitching and defense are not dynamically factored-in beyond the assumed league-average outcomes reflected in the input player stats.
 
 *   Baserunning logic, while enhanced, still simplifies some situations (e.g., no explicit modeling of runner speed differences beyond XBP, basic DP trigger logic, no hit-and-run, no simulation of SB/CS attempts during play).
+
+**Bugs**
+   *   stdout errors
+   *   Orchestrator failing to write CSV results
+
+**General ToDo**
+   *   Verbose output is being printed to console in CSV mode
+   *   Ensure that CSV is being appended to after each lineup combination (after each set of `num_games` completes)
+   *   Implement stealing
+   *   Create simple web interface for website use
+   *   Modify indicies for weighted baserunner outs
+   *   Probability parameter(s) for scoring on sac flies
+   *   (Consider) Disable printing average scores to terminal
+   *   Change "lineup" in config to "roster", and replace elsewhere. Roster can contain more than 9 players, but fails if at least 9 are not listed. Come up with a way to detmine which players are selected for permutations by orchestrator.
+   *   CSVs should be saved to log/ directory
+   *   No need for orchestrator to write final row with total runs to CSV
 
 Does not model errors explicitly.
 
 Could be extended to include pitching stats, fielding variations, more granular baserunning decisions, weather effects, park factors, etc.
 
 Consider using `multiprocessing` within `orchestrator.py` to significantly speed up the permutation testing on multi-core machines.
+
+Expanding on "granular baserunning decisions", consider implementing proper strategic baserunning that incorporates factors like runner speed, and placement of batted balls. (i.e. Mamiko Kato et al., 2025, https://journals.sagepub.com/doi/10.1177/22150218251313931). Furthermore, an accurate simulation would also incorporate tagouts on attempted "extra base" advancements.
+
+Explore means of visually representing results
+
