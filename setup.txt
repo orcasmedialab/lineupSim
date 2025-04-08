@@ -1,0 +1,35 @@
+
+## Setup
+
+1.  **Create a virtual environment (optional but recommended):**
+    ```bash
+    python -m venv venv
+    source venv/bin/activate  # On Windows use `venv\Scripts\activate`
+    ```
+2.  **Install dependencies:**
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+## Configuration
+
+*   Edit `data/config.yaml` to define:
+    *   `simulation_params`: `num_games`, `innings_per_game`, `output_log_file`.
+    *   `lineup`: A list of 9 players, each with a `name` and a `stats` dictionary containing the required metrics (plate\_appearances, at\_bats, hits, doubles, etc.).
+
+## Usage
+
+*   Run the simulation from the `baseball_simulator` root directory:
+    ```bash
+    python main.py
+    ```
+*   Simulation results, including play-by-play logs and final scores, will be saved in the `logs/` directory (default: `simulation_results.yaml`).
+
+## Notes & Future Improvements
+
+*   This simulation focuses solely on the batting team's performance. Opposing pitching and defense are not factored in.
+*   Baserunning logic is simplified (e.g., basic GIDP handling, no stolen base attempts during the simulation, simple XBP application).
+*   Does not currently model situational hitting (e.g., sacrifice bunts/flies explicitly).
+*   Could be extended to include pitching stats, fielding errors, more complex baserunning decisions (tagging up, hit-and-run), weather effects, etc.
+*   Add calculation and tracking of more detailed game stats (box score).
+
