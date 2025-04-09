@@ -147,21 +147,14 @@ python orchestrator.py
 
 *   Baserunning logic, while enhanced, still simplifies some situations (e.g., no explicit modeling of runner speed differences beyond XBP, basic DP trigger logic, no hit-and-run, no simulation of SB/CS attempts during play).
 
-**Bugs**
-   *   stdout errors
-   *   Orchestrator failing to write CSV results
-
 **General ToDo**
-   *   Verbose output is being printed to console in CSV mode
+   *   Add date and time to csv filenames
    *   Ensure that CSV is being appended to after each lineup combination (after each set of `num_games` completes)
    *   Implement stealing
    *   Create simple web interface for website use
    *   Modify indicies for weighted baserunner outs
    *   Probability parameter(s) for scoring on sac flies
-   *   (Consider) Disable printing average scores to terminal
    *   Change "lineup" in config to "roster", and replace elsewhere. Roster can contain more than 9 players, but fails if at least 9 are not listed. Come up with a way to detmine which players are selected for permutations by orchestrator.
-   *   CSVs should be saved to log/ directory
-   *   No need for orchestrator to write final row with total runs to CSV
 
 Does not model errors explicitly.
 

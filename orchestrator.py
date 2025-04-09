@@ -11,7 +11,9 @@ from math import factorial # To estimate iterations
 from src.utils import setup_logging # Use the same logging setup
 
 CONFIG_FILE = os.path.join("data", "config.yaml")
-DEFAULT_CSV_OUTPUT = "all_lineup_results.csv"
+# Save CSV in logs directory
+LOGS_DIR = "logs"
+DEFAULT_CSV_OUTPUT = os.path.join(LOGS_DIR, "all_lineup_results.csv")
 
 def load_player_ids_from_config(config_path):
     """Loads only the list of player IDs from the config file."""
@@ -49,23 +51,17 @@ def main():
         sys.exit(1)
 
     output_csv_path = DEFAULT_CSV_OUTPUT
+    # Ensure logs directory exists
+    os.makedirs(LOGS_DIR, exist_ok=True)
     logger.info(f"Output CSV will be saved to: {output_csv_path}")
 
     # Generate all permutations
     all_permutations = list(itertools.permutations(player_ids))
+    #all_permutations = all_permutations[0:200]  # for testing
     num_permutations = len(all_permutations) # factorial(9) = 362,880
     logger.info(f"Generated {num_permutations} lineup permutations.")
 
-    grand_total_runs = 0.0
-    # Read num_games from config to calculate total runs later
-    try:
-         with open(CONFIG_FILE, 'r') as f:
-              config_data = yaml.safe_load(f)
-              num_games_per_perm = config_data.get('simulation_params', {}).get('num_games', 162)
-    except Exception as e:
-         logger.error(f"Could not read num_games from config. Assuming 162. Error: {e}")
-         num_games_per_perm = 162
-
+    # Removed grand_total_runs calculation and num_games reading for it
 
     try:
         with open(output_csv_path, 'w', newline='') as f:
@@ -83,7 +79,8 @@ def main():
 
                 # Construct command
                 # Ensure python executable is correctly found (sys.executable is robust)
-                command = [sys.executable, 'main.py', '--lineup'] + list(lineup_perm) #+ ['--csv', output_csv_path] # Let main.py print to stdout
+                # Add '--verbose False' to ensure main.py doesn't default to verbose mode
+                command = [sys.executable, 'main.py', '--lineup'] + list(lineup_perm) + ['--verbose', 'False']
 
                 try:
                     # Run main.py as a subprocess, capture stdout, check for errors
@@ -100,8 +97,7 @@ def main():
                         writer.writerow(row)
                         f.flush() # Ensure data is written periodically
 
-                        # Update running total runs
-                        grand_total_runs += avg_score * num_games_per_perm
+                        # Removed grand_total_runs update
 
                     except ValueError:
                         logger.error(f"Could not convert stdout ('{avg_score_str}') to float for lineup {lineup_perm}. Skipping row.")
@@ -118,12 +114,8 @@ def main():
                     logger.error("Stopping orchestrator due to error in subprocess.")
                     sys.exit(1) # Stop execution
 
-            # After all permutations are done, write the total runs row
-            # Be careful about the number of columns for the total row
-            total_row = ["GRAND_TOTAL_RUNS"] + [""] * 8 + [f"{grand_total_runs:.0f}"] # Add total runs as integer
-            writer.writerow(total_row)
+            # Removed writing the total runs row
             logger.info(f"\n--- All Simulations Complete ---")
-            logger.info(f"Total runs scored across all {num_permutations} lineups * {num_games_per_perm} games = {grand_total_runs:.0f}")
             logger.info(f"Results summary saved to '{output_csv_path}'")
 
 
@@ -137,4 +129,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
