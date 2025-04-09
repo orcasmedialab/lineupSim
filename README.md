@@ -149,22 +149,35 @@ python orchestrator.py
 
 **General ToDo**
    *   Add date and time to csv filenames
-   *   Ensure that CSV is being appended to after each lineup combination (after each set of `num_games` completes)
+   *   Greatly reduce console output when running main.py directly
    *   Implement stealing
+   *   Ability to auto-rerun N `num_games` (i.e. 100k) for top M batting orders (i.e. 1000)
+   *   Periodic updates on time progressed
    *   Create simple web interface for website use
    *   Modify indicies for weighted baserunner outs
    *   Probability parameter(s) for scoring on sac flies
    *   Add arguments for number of games, number of permutations (cropped)
-   *   Consider separating stats from config file. Perhaps rename parent folder
+   *   Rename logs/ to results/ or similar. Each result set should have its own timestamped folder
+   *   Upon completion, orchestrator should call a visual-generator script that will dump plots into the appropriate results folder. Argument flag to call plotter
+   *   Consider separating stats from config file (i.e. player_profiles.yaml). Also consider renaming parent folder
    *   Change "lineup" in config to "roster", and replace elsewhere. Roster can contain more than 9 players, but fails if at least 9 are not listed. Come up with a way to detmine which players are selected for permutations by orchestrator.
 
 Does not model errors explicitly.
 
 Could be extended to include pitching stats, fielding variations, more granular baserunning decisions, weather effects, park factors, etc.
 
-Consider using `multiprocessing` within `orchestrator.py` to significantly speed up the permutation testing on multi-core machines.
+Consider using `multiprocessing` within `orchestrator.py` to significantly speed up the permutation testing on multi-core machines. Make `--cores` a command line arg.
 
 Expanding on "granular baserunning decisions", consider implementing proper strategic baserunning that incorporates factors like runner speed, and placement of batted balls. (i.e. Mamiko Kato et al., 2025, https://journals.sagepub.com/doi/10.1177/22150218251313931). Furthermore, an accurate simulation would also incorporate tagouts on attempted "extra base" advancements.
+
+Expanding on Website:
+   *   User can upload stats, or use fake players for product preview
+   *   Upon completion of simulation:
+      *   Notification will be sent to user email
+      *   Opportunity for user to obtain CSV results and plots
+   *   Webapp will have interactable plots and visualizations
+   *   WebApp will show progress of current simulation, perhaps viewable via a special userkey or login
+   *   Upon initiation of simulation, params will be fetched by local server and computed on prem. Alternatively, multiple containiers can be launched on cloud provider to each process a predetermined portion of the permutation-set.
 
 Explore means of visually representing results
 
