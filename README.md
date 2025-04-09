@@ -24,7 +24,7 @@ This project simulates baseball games for a single team based on detailed player
 lineupSim/
 ├── data/ # Input configuration files
 │ └── config.yaml
-├── logs/ # Output log files (YAML format in verbose mode)
+├── logs/ # Output log files (YAML and CSV formats)
 ├── src/ # Source code
 │ ├── init.py
 │ ├── constants.py
@@ -35,7 +35,7 @@ lineupSim/
 ├── main.py # Main execution script for single lineup simulations
 ├── orchestrator.py # Script to run simulations for all lineup permutations
 ├── requirements.txt # Python dependencies
-├── all_lineup_results.csv # Example output file from orchestrator.py
+├── .gitignore # List of irrelevant and untracked elements
 └── README.md # This file
 ```
 
@@ -154,6 +154,8 @@ python orchestrator.py
    *   Create simple web interface for website use
    *   Modify indicies for weighted baserunner outs
    *   Probability parameter(s) for scoring on sac flies
+   *   Add arguments for number of games, number of permutations (cropped)
+   *   Consider separating stats from config file. Perhaps rename parent folder
    *   Change "lineup" in config to "roster", and replace elsewhere. Roster can contain more than 9 players, but fails if at least 9 are not listed. Come up with a way to detmine which players are selected for permutations by orchestrator.
 
 Does not model errors explicitly.
