@@ -16,25 +16,51 @@ CONFIG_FILE = os.path.join("data", "config.yaml")
 RESULTS_BASE_DIR = "results"
 
 def load_player_ids_from_config(config_path):
-    """Loads only the list of player IDs from the config file."""
+    """Loads player IDs from the player data file specified in the main config."""
+    # Get logger instance within the function scope
+    logger = logging.getLogger(__name__) # Or use "Orchestrator" if preferred for consistency
+    logger.info(f"Loading main configuration from: {config_path}")
     try:
         with open(config_path, 'r') as f:
             config_data = yaml.safe_load(f)
-        roster_data = config_data.get('lineup', [])
+        player_file_path = config_data.get('player_data_file')
+        if not player_file_path:
+            raise ValueError("Main config file must specify 'player_data_file'.")
+
+        logger.info(f"Loading player IDs from player data file: {player_file_path}")
+        with open(player_file_path, 'r') as f_players:
+            player_config = yaml.safe_load(f_players)
+        roster_data = player_config.get('players', [])
+        if not roster_data:
+            raise ValueError(f"Player data file {player_file_path} must contain a 'players' list.")
+
         player_ids = [player['id'] for player in roster_data]
+        # Validation
         if len(player_ids) != 9:
-            raise ValueError(f"Expected 9 players in config 'lineup', found {len(player_ids)}")
+            raise ValueError(f"Expected 9 players in player data file '{player_file_path}', found {len(player_ids)}")
         if len(player_ids) != len(set(player_ids)):
-             raise ValueError(f"Duplicate player IDs found in config file.")
+             raise ValueError(f"Duplicate player IDs found in player data file '{player_file_path}'.")
+        logger.info(f"Successfully loaded {len(player_ids)} player IDs.")
         return player_ids
-    except FileNotFoundError:
-        logging.error(f"Configuration file not found at {config_path}")
+    except FileNotFoundError as e:
+        # More specific error message depending on which file was not found
+        if 'config_data' not in locals():
+             logger.error(f"Main configuration file not found at {config_path}")
+        else:
+             logger.error(f"Player data file not found at {player_file_path}")
         raise
-    except KeyError:
-        logging.error(f"Could not find 'id' key for a player in {config_path}")
+    except yaml.YAMLError as e:
+         # More specific error message
+         if 'player_config' not in locals():
+              logger.error(f"Error parsing main config YAML {config_path}: {e}")
+         else:
+              logger.error(f"Error parsing player data YAML {player_file_path}: {e}")
+         raise
+    except KeyError as e:
+        logger.error(f"Could not find expected key ('player_data_file' in config or 'id'/'players' in player file): {e}")
         raise
     except Exception as e:
-        logging.error(f"Error loading player IDs from config: {e}")
+        logger.error(f"Error loading player IDs: {e}")
         raise
 
 def main():

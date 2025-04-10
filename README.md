@@ -1,6 +1,6 @@
 # Python Baseball Simulator
 
-This project simulates baseball games for a single team based on detailed player statistics provided in a YAML configuration file. It allows for simulating individual seasons for specific lineups or running experiments across all possible lineup permutations.
+This project simulates baseball games for a single team based on detailed player statistics provided in YAML configuration files. It allows for simulating individual seasons for specific lineups or running experiments across all possible lineup permutations.
 
 ## Features
 
@@ -8,7 +8,7 @@ This project simulates baseball games for a single team based on detailed player
 *   Calculates Plate Appearance outcome probabilities (1B, 2B, 3B, HR, BB, HBP, SO, Ground Out, Fly Out) based on input stats.
 *   Distinguishes between Ground Outs (GO) and Fly Outs (FO) based on player GB/FB ratios.
 *   Models complex baserunning scenarios, including Forced Advances, Double Plays (DP), Fielder's Choice (FC), Sacrifice Flies, Extra Base Advancement, Base Traffic
-*   Simulates a configurable number of games per run (defined in `config.yaml`).
+*   Simulates a configurable number of games per run (defined in `data/config.yaml`).
 *   Flexible output options:
 *   **Logging:**
     *   By default, only WARNING and ERROR messages are shown on the console (stderr).
@@ -26,7 +26,7 @@ This project simulates baseball games for a single team based on detailed player
         *   `--save-yaml` flag in `main.py` forces YAML generation even when using `--csv`.
 *   Supports executing simulations for:
     *   A specific lineup order provided via command-line arguments.
-    *   The default lineup order defined in `config.yaml` if no specific order is provided.
+    *   The default lineup order defined in the player data file (`data/players.yaml` by default).
 *   Includes an orchestrator script (`orchestrator.py`) to automatically simulate all 9! (362,880) possible lineup permutations and aggregate results into a summary CSV file.
 
 ## Directory Structure
@@ -34,19 +34,20 @@ This project simulates baseball games for a single team based on detailed player
 ```bash
 lineupSim/
 ├── data/ # Input configuration files
-│ └── config.yaml
+│   ├── config.yaml # Main simulation parameters
+│   └── players.yaml # Player roster and stats
 ├── results/ # Output files (YAML and CSV formats)
 │   └── YYYYMMDD_HHMMSS/ # Timestamped folder for each orchestrator run
 │       └── all_lineup_results.csv
-│   └── simulation_results_YYYYMMDD_HHMMSS.yaml # Example direct run YAML output
+│   ├── simulation_results_YYYYMMDD_HHMMSS.yaml # Example direct run YAML output
 │   └── my_sim_results.csv # Example direct run CSV output
 ├── src/ # Source code
-│ ├── __init__.py
-│ ├── constants.py
-│ ├── player.py
-│ ├── game.py
-│ ├── simulator.py
-│ └── utils.py
+│   ├── __init__.py
+│   ├── constants.py
+│   ├── player.py
+│   ├── game.py
+│   ├── simulator.py
+│   └── utils.py
 ├── main.py # Main execution script for single lineup simulations
 ├── orchestrator.py # Script to run simulations for all lineup permutations
 ├── requirements.txt # Python dependencies
@@ -68,22 +69,46 @@ lineupSim/
     pip install -r requirements.txt
     ```
 
-## Configuration (`data/config.yaml`)
+## Configuration
 
-*   Edit `data/config.yaml` to define:
+Configuration is split into two files within the `data/` directory:
+
+### 1. `data/config.yaml`
+
+*   Defines simulation parameters and points to the player data file.
     *   `simulation_params`:
         *   `num_games`: Number of games to simulate *per lineup execution*.
         *   `innings_per_game`: Typically 9.
         *   `verbose`: Default logging mode (`True` for YAML, `False` otherwise). Overridden if `--csv` is used in `main.py`.
-        *   `output_log_file`: *Note: This parameter is currently unused as filenames are now timestamped.*
         *   `dp_attempt_probability_on_go`: Chance a GO with runner(s) on and < 2 outs becomes a DP attempt.
         *   `double_play_runner_out_weights`: Relative weights for which *runner* (on 1B, 2B, or 3B) is the second out in a DP. Keys are base indices (0, 1, 2).
         *   `fielders_choice_out_weights`: Relative weights for who is out (Batter = -1, Runner on 1B = 0, etc.) on an FC.
-    *   `lineup`: **Acts as a player pool.** A list of 9 players, each with:
+    *   `player_data_file`: **Required.** Path to the YAML file containing the player roster (e.g., `data/players.yaml`).
+    *   `orchestrator_params`: Placeholder for future orchestrator-specific settings.
+
+### 2. `data/players.yaml` (Example)
+
+*   Contains the list of players available for simulation under the `players:` key.
+    *   `players`: A list of 9 players (required for orchestrator), each with:
         *   `id`: Unique alphanumeric player identifier (e.g., "P001").
         *   `name`: Player's display name.
         *   `stats`: Dictionary including required metrics (`plate_appearances`, `at_bats`, `hits`, `doubles`, `triples`, `home_runs`, `walks`, `strikeouts`, `hit_by_pitch`, `extra_base_percentage`, `gb_fb_ratio`, etc.).
         *   The order in this list defines the *default* lineup if `main.py` is run without the `--lineup` argument.
+
+```yaml
+# Example data/players.yaml
+players:
+  - id: "P001"
+    name: "Lead Hitter"
+    stats: { ... } # Full stats dictionary
+  - id: "P002"
+    name: "Solid Contact"
+    stats: { ... }
+  # ... other players ...
+  - id: "P009"
+    name: "Pitcher Spot (Weak Hitter)"
+    stats: { ... }
+```
 
 ## Usage
 
@@ -91,11 +116,11 @@ There are two primary ways to run simulations:
 
 ### 1. Running Single Simulations (`main.py`)
 
-Use `main.py` to simulate games for one specific lineup order (either provided via arguments or default from config) and get detailed logs or a specific output value. Output files are saved in the `results/` directory.
+Use `main.py` to simulate games for one specific lineup order (either provided via arguments or default from `players.yaml`) and get detailed logs or a specific output value. Output files are saved in the `results/` directory.
 
 **Arguments:**
 
-*   `--lineup ID1 ID2 ... ID9` (Optional): Specify the 9 player IDs in the desired batting order. If omitted, the order from `config.yaml` is used.
+*   `--lineup ID1 ID2 ... ID9` (Optional): Specify the 9 player IDs in the desired batting order. If omitted, the order from `data/players.yaml` is used.
 *   `--csv FILENAME.csv` (Optional): Output the average score for the run to the specified CSV file (e.g., `my_results.csv`) inside the `results/` directory. Appends if the file exists. Disables default YAML logging.
 *   `--verbose True|False` (Optional): Controls default YAML logging. `True` enables it, `False` disables it. Defaults to `True` if `--csv` is not used. Overridden by `--csv` unless `--save-yaml` is also used.
 *   `--debug` (Optional Flag): Enable DEBUG level console logging (stderr) for all modules.
@@ -104,7 +129,7 @@ Use `main.py` to simulate games for one specific lineup order (either provided v
 
 **Examples:**
 
-*   **Simulate using default lineup order (from config) with verbose YAML output:**
+*   **Simulate using default lineup order (from `players.yaml`) with verbose YAML output:**
     ```bash
     python main.py
     ```
@@ -142,11 +167,12 @@ Use `main.py` to simulate games for one specific lineup order (either provided v
 
 ### 2. Running All Permutations (`orchestrator.py`)
 
-Use `orchestrator.py` to automatically run simulations for *all possible* 9! (362,880) batting order permutations using the players defined in `config.yaml`. This is useful for finding the optimal lineup based on average runs scored over a season.
+Use `orchestrator.py` to automatically run simulations for *all possible* 9! (362,880) batting order permutations using the players defined in `data/players.yaml`. This is useful for finding the optimal lineup based on average runs scored over a season.
 
 **How it works:**
 
-*   Reads player IDs from `config.yaml`.
+*   Reads `data/config.yaml` to find the path to the player data file.
+*   Reads player IDs from the specified player data file (e.g., `data/players.yaml`).
 *   Creates a timestamped directory for the run (e.g., `results/YYYYMMDD_HHMMSS/`).
 *   Generates every permutation of those 9 IDs.
 *   For each permutation:
@@ -183,7 +209,7 @@ python orchestrator.py
    *   Probability parameter(s) for scoring on sac flies
    *   Add arguments for number of games, number of permutations (cropped)
    *   Upon completion, orchestrator should call a visual-generator script that will dump plots into the appropriate results folder. Argument flag to call plotter
-   *   Consider separating stats from config file (i.e. player_profiles.yaml). Also consider renaming parent folder
+   *   Consider separating stats from config file (i.e. player_profiles.yaml). Also consider renaming parent folder (Done - separated into `players.yaml`)
    *   Change "lineup" in config to "roster", and replace elsewhere. Roster can contain more than 9 players, but fails if at least 9 are not listed. Come up with a way to detmine which players are selected for permutations by orchestrator.
 
 Does not model errors explicitly.

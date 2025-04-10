@@ -40,12 +40,31 @@ class Simulator:
             raise
 
     def _load_players(self):
-        """Creates Player objects from the config, stores in a dict by ID."""
+        """Loads player data from the file specified in the main config."""
         players = {}
-        roster_data = self.config.get('lineup', []) # It's really a roster pool now
-        if not roster_data:
-             logger.error("No lineup/roster found in configuration file.")
-             raise ValueError("Configuration must contain a 'lineup' section.")
+        player_file_path = self.config.get('player_data_file')
+        if not player_file_path:
+            logger.error("Config file missing 'player_data_file' key.")
+            raise ValueError("Config must specify 'player_data_file'.")
+
+        logger.info(f"Loading player data from: {player_file_path}")
+        try:
+            with open(player_file_path, 'r') as f:
+                player_config = yaml.safe_load(f)
+            roster_data = player_config.get('players', []) # Expecting a top-level 'players' key
+            if not roster_data:
+                 logger.error(f"No 'players' list found or list is empty in {player_file_path}.")
+                 raise ValueError(f"Player data file {player_file_path} must contain a 'players' list.")
+        except FileNotFoundError:
+            logger.error(f"Error: Player data file not found at {player_file_path}")
+            raise
+        except yaml.YAMLError as e:
+            logger.error(f"Error parsing player data YAML file {player_file_path}: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"An unexpected error occurred loading player data file {player_file_path}: {e}")
+            raise
+
 
         for player_data in roster_data:
             try:
@@ -157,29 +176,42 @@ class Simulator:
     
     def get_default_lineup_ids(self):
         """
-        Retrieves the player IDs in the order they appear in the config file.
+        Retrieves the player IDs in the order they appear in the player data file.
         """
-        logger.debug("Fetching default lineup order from config file.")
+        logger.debug("Fetching default lineup order from player data file.")
+        player_file_path = self.config.get('player_data_file')
+        if not player_file_path:
+            # This should ideally not happen if _load_players succeeded, but check anyway
+            logger.error("Config file missing 'player_data_file' key when getting default lineup.")
+            raise ValueError("Config must specify 'player_data_file'.")
+
         try:
-            roster_data = self.config.get('lineup', [])
+            with open(player_file_path, 'r') as f:
+                player_config = yaml.safe_load(f)
+            roster_data = player_config.get('players', [])
             if not roster_data:
-                raise ValueError("Cannot determine default lineup: 'lineup' section is missing or empty in config.")
+                raise ValueError(f"Cannot determine default lineup: 'players' section is missing or empty in {player_file_path}.")
 
             default_ids = [player['id'] for player in roster_data]
 
+            # Keep the validation logic
             if len(default_ids) != 9:
-                 logger.warning(f"Default lineup extracted from config has {len(default_ids)} players, expected 9.")
-                 # Decide if this should be a hard error or just a warning
-                 # Raising an error is safer if the rest of the logic expects 9 players
-                 raise ValueError(f"Default lineup from config must have exactly 9 players, found {len(default_ids)}.")
+                 logger.warning(f"Default lineup extracted from player file has {len(default_ids)} players, expected 9.")
+                 raise ValueError(f"Default lineup from player file must have exactly 9 players, found {len(default_ids)}.")
             if len(default_ids) != len(set(default_ids)):
-                raise ValueError("Duplicate player IDs found in the default lineup order in the config file.")
+                raise ValueError("Duplicate player IDs found in the default lineup order in the player file.")
 
-            logger.debug(f"Default lineup IDs: {default_ids}")
+            logger.debug(f"Default lineup IDs from player file: {default_ids}")
             return default_ids
+        except FileNotFoundError:
+            logger.error(f"Error: Player data file not found at {player_file_path} while getting default lineup.")
+            raise
+        except yaml.YAMLError as e:
+            logger.error(f"Error parsing player data YAML file {player_file_path} while getting default lineup: {e}")
+            raise
         except KeyError as e:
-            logger.error(f"Missing 'id' key for a player in config 'lineup' section while getting default order.")
-            raise ValueError(f"Configuration error: Missing 'id' key in lineup data: {e}")
+            logger.error(f"Missing 'id' key for a player in player data file {player_file_path} while getting default order.")
+            raise ValueError(f"Player data error: Missing 'id' key in player data: {e}")
         except Exception as e:
-            logger.error(f"An unexpected error occurred getting default lineup order: {e}")
+            logger.error(f"An unexpected error occurred getting default lineup order from player file: {e}")
             raise # Re-raise other exceptions

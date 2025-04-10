@@ -2,7 +2,7 @@ simulation_params:
   num_games: 162 # Number of games PER BATTING ORDER in a single main.py run
   innings_per_game: 9
   verbose: True # Default: log detailed yaml. Overridden by --csv flag in main.py
-  output_log_file: "simulation_results.yaml" # Used only if verbose=True
+  # output_log_file: "simulation_results.yaml" # No longer used directly, filename is timestamped
   # --- New Params ---
   # Probability of a Ground Out with runner(s) on and < 2 outs resulting in a DP attempt
   # This is a simplification as real DP probability is complex. Adjust as needed.
@@ -21,174 +21,10 @@ simulation_params:
     1: 1 # Weight for runner on 2nd being out
     2: 1 # Weight for runner on 3rd being out
 
-lineup: # Now acts as a roster pool, order determined by main.py args
-  - id: "P001" # Alphanumeric ID
-    name: "Lead Hitter"
-    stats:
-      plate_appearances: 650
-      at_bats: 580
-      runs: 100
-      hits: 174
-      doubles: 35
-      triples: 5
-      home_runs: 20
-      stolen_bases: 15
-      caught_stealing: 5
-      walks: 65
-      strikeouts: 110
-      double_plays_grounded_into: 10 # Used indirectly via dp_attempt_probability_on_go
-      hit_by_pitch: 5
-      extra_base_percentage: 0.30
-      gb_fb_ratio: 1.1 # Example value
+# --- Player Data ---
+# Path to the file containing the player roster and stats
+player_data_file: data/players.yaml
 
-  - id: "P002"
-    name: "Solid Contact"
-    stats:
-      plate_appearances: 600
-      at_bats: 550
-      runs: 80
-      hits: 165
-      doubles: 40
-      triples: 2
-      home_runs: 15
-      stolen_bases: 3
-      caught_stealing: 2
-      walks: 45
-      strikeouts: 90
-      double_plays_grounded_into: 15
-      hit_by_pitch: 5
-      extra_base_percentage: 0.25
-      gb_fb_ratio: 1.3 # High GB rate
-
-  - id: "P003"
-    name: "Power Slugger"
-    stats:
-      plate_appearances: 620
-      at_bats: 540
-      runs: 95
-      hits: 140
-      doubles: 25
-      triples: 1
-      home_runs: 35
-      stolen_bases: 1
-      caught_stealing: 0
-      walks: 70
-      strikeouts: 150
-      double_plays_grounded_into: 12
-      hit_by_pitch: 10
-      extra_base_percentage: 0.20
-      gb_fb_ratio: 0.7 # More fly balls
-
-  - id: "P004"
-    name: "Cleanup Hitter"
-    stats:
-      plate_appearances: 610
-      at_bats: 560
-      runs: 90
-      hits: 168
-      doubles: 38
-      triples: 3
-      home_runs: 25
-      stolen_bases: 5
-      caught_stealing: 1
-      walks: 45
-      strikeouts: 120
-      double_plays_grounded_into: 18
-      hit_by_pitch: 5
-      extra_base_percentage: 0.28
-      gb_fb_ratio: 1.0
-
-  - id: "P005"
-    name: "Average Joe"
-    stats:
-      plate_appearances: 550
-      at_bats: 500
-      runs: 60
-      hits: 130
-      doubles: 28
-      triples: 2
-      home_runs: 10
-      stolen_bases: 8
-      caught_stealing: 3
-      walks: 40
-      strikeouts: 100
-      double_plays_grounded_into: 14
-      hit_by_pitch: 10
-      extra_base_percentage: 0.35
-      gb_fb_ratio: 0.9
-
-  - id: "P006"
-    name: "On-Base Guy"
-    stats:
-      plate_appearances: 580
-      at_bats: 500
-      runs: 75
-      hits: 140
-      doubles: 20
-      triples: 4
-      home_runs: 8
-      stolen_bases: 12
-      caught_stealing: 4
-      walks: 70
-      strikeouts: 80
-      double_plays_grounded_into: 9
-      hit_by_pitch: 10
-      extra_base_percentage: 0.32
-      gb_fb_ratio: 1.2
-
-  - id: "P007"
-    name: "Veteran Presence"
-    stats:
-      plate_appearances: 500
-      at_bats: 450
-      runs: 55
-      hits: 120
-      doubles: 22
-      triples: 1
-      home_runs: 12
-      stolen_bases: 2
-      caught_stealing: 1
-      walks: 45
-      strikeouts: 95
-      double_plays_grounded_into: 11
-      hit_by_pitch: 5
-      extra_base_percentage: 0.22
-      gb_fb_ratio: 0.8
-
-  - id: "P008"
-    name: "Speedy Bottom"
-    stats:
-      plate_appearances: 480
-      at_bats: 430
-      runs: 65
-      hits: 115
-      doubles: 18
-      triples: 8
-      home_runs: 5
-      stolen_bases: 25
-      caught_stealing: 6
-      walks: 40
-      strikeouts: 105
-      double_plays_grounded_into: 7
-      hit_by_pitch: 10
-      extra_base_percentage: 0.40
-      gb_fb_ratio: 0.6 # More fly balls for speed guy? Or ground balls through holes? Let's mix.
-
-  - id: "P009"
-    name: "Pitcher Spot (Weak Hitter)"
-    stats:
-      plate_appearances: 50
-      at_bats: 45
-      runs: 5
-      hits: 8
-      doubles: 1
-      triples: 0
-      home_runs: 0
-      stolen_bases: 0
-      caught_stealing: 0
-      walks: 3
-      strikeouts: 25
-      double_plays_grounded_into: 3
-      hit_by_pitch: 2
-      extra_base_percentage: 0.10
-      gb_fb_ratio: 1.5 # Weak contact often on ground
+# --- Orchestrator Specific Parameters ---
+# Placeholder for future orchestrator settings (e.g., multiprocessing cores)
+orchestrator_params: {}
