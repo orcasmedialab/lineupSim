@@ -30,6 +30,8 @@ def main():
                         help='Force saving the detailed YAML log file, even when using --csv.')
     parser.add_argument('--output-dir', type=str, default=None,
                         help='Specify the output directory for results (used internally by orchestrator).')
+    parser.add_argument('--num-games', type=int, default=None,
+                        help='Override the number of games to simulate per lineup (from config.yaml).')
 
     args = parser.parse_args()
 
@@ -107,9 +109,13 @@ def main():
 
         # Run simulations for the determined lineup
         # The validate_lineup method inside run_simulations will check the final lineup_to_use
-        # Pass the calculated verbose_mode to simulator for its internal logic if needed
+        # Pass the calculated verbose_mode and potential num_games override
         # Note: verbose_mode now primarily controls the *default* YAML saving behavior
-        simulator.run_simulations(lineup_ids=lineup_to_use, verbose=verbose_mode)
+        simulator.run_simulations(
+            lineup_ids=lineup_to_use,
+            verbose=verbose_mode,
+            num_games_override=args.num_games # Pass the override value
+        )
 
         # --- Handle Output ---
         avg_score = simulator.get_average_score()

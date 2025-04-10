@@ -97,9 +97,10 @@ class Simulator:
         return True
 
 
-    def run_simulations(self, lineup_ids, verbose):
+    def run_simulations(self, lineup_ids, verbose, num_games_override=None):
         """
         Runs the configured number of game simulations for a specific lineup order.
+        Allows overriding the number of games via num_games_override.
         """
         self.simulation_params['verbose'] = verbose # Update internal verbose state
 
@@ -107,7 +108,14 @@ class Simulator:
         self.validate_lineup(lineup_ids)
         ordered_lineup = [self.player_pool[p_id] for p_id in lineup_ids]
 
-        num_games = self.simulation_params.get('num_games', 1) # Games per lineup run
+        # Determine number of games: override > config > default(1)
+        if num_games_override is not None:
+            num_games = num_games_override
+            logger.info(f"Overriding number of games from command line: {num_games}")
+        else:
+            num_games = self.simulation_params.get('num_games', 1) # Games per lineup run
+            logger.info(f"Using number of games from config: {num_games}")
+
         innings_per_game = self.simulation_params.get('innings_per_game', 9)
         logger.info(f"Starting simulation of {num_games} game(s) for lineup: {', '.join(lineup_ids)}...")
 
