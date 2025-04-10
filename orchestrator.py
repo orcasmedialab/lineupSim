@@ -7,13 +7,13 @@ import os
 import sys
 import csv
 import logging
-from math import factorial # To estimate iterations
-from src.utils import setup_logging # Use the same logging setup
+import datetime # Added for timestamp
+from math import factorial
+from src.utils import setup_logging
 
 CONFIG_FILE = os.path.join("data", "config.yaml")
-# Save CSV in logs directory
-LOGS_DIR = "logs"
-DEFAULT_CSV_OUTPUT = os.path.join(LOGS_DIR, "all_lineup_results.csv")
+# Base directory for all results
+RESULTS_BASE_DIR = "results"
 
 def load_player_ids_from_config(config_path):
     """Loads only the list of player IDs from the config file."""
@@ -50,14 +50,23 @@ def main():
         logger.error("Failed to load player IDs. Exiting.")
         sys.exit(1)
 
-    output_csv_path = DEFAULT_CSV_OUTPUT
-    # Ensure logs directory exists
-    os.makedirs(LOGS_DIR, exist_ok=True)
-    logger.info(f"Output CSV will be saved to: {output_csv_path}")
+    # --- Create Timestamped Output Directory ---
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    run_output_dir = os.path.join(RESULTS_BASE_DIR, timestamp)
+    try:
+        os.makedirs(run_output_dir, exist_ok=True)
+        logger.info(f"Created results directory: {run_output_dir}")
+    except OSError as e:
+        logger.error(f"Failed to create results directory {run_output_dir}: {e}")
+        sys.exit(1)
+
+    # Define CSV output path within the timestamped directory
+    output_csv_path = os.path.join(run_output_dir, "all_lineup_results.csv")
+    logger.info(f"Orchestrator results CSV will be saved to: {output_csv_path}")
 
     # Generate all permutations
     all_permutations = list(itertools.permutations(player_ids))
-    #all_permutations = all_permutations[0:200]  # for testing
+    #all_permutations = all_permutations[0:100]  # for testing
     num_permutations = len(all_permutations) # factorial(9) = 362,880
     logger.info(f"Generated {num_permutations} lineup permutations.")
 
@@ -79,8 +88,14 @@ def main():
 
                 # Construct command
                 # Ensure python executable is correctly found (sys.executable is robust)
-                # Add '--verbose False' to ensure main.py doesn't default to verbose mode
-                command = [sys.executable, 'main.py', '--lineup'] + list(lineup_perm) + ['--verbose', 'False']
+                # Add '--verbose False' and pass the '--output-dir'
+                command = [
+                    sys.executable, 'main.py',
+                    '--lineup'] + list(lineup_perm) + [
+                    '--verbose', 'False',
+                    '--output-dir', run_output_dir # Pass the specific dir for this run
+                ]
+                logger.debug(f"Executing command: {' '.join(command)}")
 
                 try:
                     # Run main.py as a subprocess, capture stdout, check for errors

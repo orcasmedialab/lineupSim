@@ -117,14 +117,22 @@ class Simulator:
         self.average_score = total_score / num_games if num_games > 0 else 0.0
         logger.info(f"Simulation finished for lineup. Average Score: {self.average_score:.2f}")
 
-    def save_results_yaml(self):
-        """Saves the detailed simulation results to a YAML file."""
-        output_dir = "logs"
-        output_filename = self.simulation_params.get('output_log_file', 'simulation_results.yaml')
-        output_path = os.path.join(output_dir, output_filename)
-        os.makedirs(output_dir, exist_ok=True)
+    def save_results_yaml(self, output_path):
+        """Saves the detailed simulation results to the specified YAML file path."""
+        # output_dir = "logs" # No longer needed
+        # output_filename = self.simulation_params.get('output_log_file', 'simulation_results.yaml') # Filename is now passed in path
+        # output_path = os.path.join(output_dir, output_filename) # Path is now passed directly
+        # os.makedirs(output_dir, exist_ok=True) # Directory creation handled in main.py
 
-        logger.info(f"Saving detailed simulation results (YAML) to: {output_path}")
+        # Ensure the directory for the output path exists (safety check)
+        try:
+            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        except OSError as e:
+             logger.error(f"Error ensuring directory exists for {output_path}: {e}")
+             # Optionally, re-raise or return to indicate failure
+             return # Exit the save function if directory cannot be confirmed
+
+        logger.debug(f"Attempting to save detailed simulation results (YAML) to: {output_path}")
         output_data = {
             "simulation_summary": {
                 "num_games_simulated": len(self.results),
@@ -175,4 +183,3 @@ class Simulator:
         except Exception as e:
             logger.error(f"An unexpected error occurred getting default lineup order: {e}")
             raise # Re-raise other exceptions
-

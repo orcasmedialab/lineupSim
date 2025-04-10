@@ -4,11 +4,13 @@ import logging
 import argparse
 import os
 import sys
-import csv # Import csv here if using the secondary append logic
+import csv
+import datetime # Added for timestamp
 from src.simulator import Simulator
 from src.utils import setup_logging
 
 CONFIG_FILE = os.path.join("data", "config.yaml")
+RESULTS_BASE_DIR = "results" # Consistent base directory
 
 def main():
     parser = argparse.ArgumentParser(description="Baseball Game Simulator")
@@ -26,10 +28,23 @@ def main():
                         help='Show detailed play-by-play logs from the game simulation on stderr.')
     parser.add_argument('--save-yaml', action='store_true',
                         help='Force saving the detailed YAML log file, even when using --csv.')
+    parser.add_argument('--output-dir', type=str, default=None,
+                        help='Specify the output directory for results (used internally by orchestrator).')
 
     args = parser.parse_args()
 
-    # Determine verbosity (same logic as before)
+    # --- Determine Output Directory ---
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S") # Timestamp for potential filenames
+    if args.output_dir:
+        # Use the directory provided by the orchestrator
+        run_output_dir = args.output_dir
+        # Ensure the orchestrator-provided directory exists (it should, but safety check)
+        os.makedirs(run_output_dir, exist_ok=True)
+    else:
+        # Direct run: Use the base results directory
+        run_output_dir = RESULTS_BASE_DIR
+        os.makedirs(run_output_dir, exist_ok=True) # Ensure base results directory exists
+
     # Determine verbosity more robustly
     if args.csv:
         verbose_mode = False
@@ -53,6 +68,9 @@ def main():
 
     # Get the main logger for this script
     logger = logging.getLogger(__name__)
+
+    # Log directory info now that logger is available
+    logger.info(f"Using output directory: {run_output_dir}")
 
     # Specifically set game logger level if requested
     if args.show_game_logs:
@@ -104,10 +122,16 @@ def main():
         # AND YAML wasn't explicitly forced with --save-yaml
         print_score_to_stdout = not verbose_mode and not args.save_yaml
 
+        # --- Save YAML ---
         if save_yaml_output:
-            logger.info("Saving results to YAML file...") # Use INFO level
-            simulator.save_results_yaml()
+            # Generate timestamped YAML filename
+            yaml_filename = f"simulation_results_{timestamp}.yaml"
+            yaml_path = os.path.join(run_output_dir, yaml_filename)
+            logger.info(f"Saving results to YAML file: {yaml_path}") # Use INFO level
+            # Pass directory and filename to simulator method (needs update)
+            simulator.save_results_yaml(output_path=yaml_path) # Pass full path
 
+        # --- Print Score to Stdout (for Orchestrator) ---
         if print_score_to_stdout:
             # Print average score to stdout for potential orchestrator capture
             print(f"{avg_score:.4f}", end='')
@@ -115,14 +139,16 @@ def main():
             logger.debug(f"Printed average score to stdout: {avg_score:.4f}")
 
 
-        # Optional CSV append (logic remains the same)
+        # --- Append Score to CSV ---
         if args.csv:
-            output_dir = "logs"
-            os.makedirs(output_dir, exist_ok=True) # Ensure logs directory exists
-            csv_path = os.path.join(output_dir, args.csv) # Prepend logs/ directory
+            # Use the determined run_output_dir (results/ for direct, results/timestamp/ for orchestrator)
+            csv_filename = args.csv # Keep the user-provided filename part
+            csv_path = os.path.join(run_output_dir, csv_filename)
             logger.info(f"Attempting to append score to CSV: {csv_path}") # This will only show if root level is INFO/DEBUG
             try:
                 file_exists = os.path.isfile(csv_path)
+                # Ensure directory exists (redundant if created above, but safe)
+                os.makedirs(os.path.dirname(csv_path), exist_ok=True)
                 with open(csv_path, 'a', newline='') as f:
                     writer = csv.writer(f)
                     # Add header if file is new and we are appending directly
