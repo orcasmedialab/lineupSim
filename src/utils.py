@@ -3,8 +3,9 @@
 import logging
 import sys
 
-# Keep level at INFO by default, main.py can adjust if needed
-def setup_logging(level=logging.INFO):
+# Keep level at WARNING by default to reduce console noise
+# main.py can adjust if needed via --debug or --show-game-logs
+def setup_logging(level=logging.WARNING):
     """Configures basic logging to stderr."""
     logging.basicConfig(level=level,
                         format='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
