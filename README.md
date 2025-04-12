@@ -38,7 +38,8 @@ lineupSim/
 │   └── players.yaml # Player roster and stats
 ├── results/ # Output files (YAML and CSV formats)
 │   └── YYYYMMDD_HHMMSS/ # Timestamped folder for each orchestrator run
-│       └── all_lineup_results.csv
+│       ├── 162_game_results.csv # Example initial run CSV (162 games)
+│       └── 1000_game_results.csv # Example rerun CSV (1000 games)
 │   ├── simulation_results_YYYYMMDD_HHMMSS.yaml # Example direct run YAML output
 │   └── my_sim_results.csv # Example direct run CSV output
 ├── src/ # Source code
@@ -68,6 +69,7 @@ lineupSim/
     ```bash
     pip install -r requirements.txt
     ```
+    (This will install `PyYAML` and `pandas`)
 
 ## Configuration
 
@@ -84,7 +86,10 @@ Configuration is split into two files within the `data/` directory:
         *   `double_play_runner_out_weights`: Relative weights for which *runner* (on 1B, 2B, or 3B) is the second out in a DP. Keys are base indices (0, 1, 2).
         *   `fielders_choice_out_weights`: Relative weights for who is out (Batter = -1, Runner on 1B = 0, etc.) on an FC.
     *   `player_data_file`: **Required.** Path to the YAML file containing the player roster (e.g., `data/players.yaml`).
-    *   `orchestrator_params`: Placeholder for future orchestrator-specific settings.
+    *   `orchestrator_params`: Settings specific to `orchestrator.py`:
+        *   `auto_rerun`: (Boolean, default `False`) Whether to automatically run a more detailed simulation for the top N lineups after the initial permutation run completes.
+        *   `rerun_top_n`: (Integer, default `10`) How many of the top-scoring lineups from the initial run to include in the auto-rerun.
+        *   `rerun_num_games`: (Integer, default `1000`) How many games to simulate for each lineup during the auto-rerun phase.
 
 ### 2. `data/players.yaml` (Example)
 
@@ -150,7 +155,8 @@ Use `orchestrator.py` to automatically run simulations for batting order permuta
 
 *   `--start N` (Optional): Starting index (0-based) of permutations to simulate. Defaults to 0.
 *   `--stop N` (Optional): Stopping index (exclusive) of permutations to simulate. Defaults to simulating all permutations.
-*   `--num-games N` (Optional): Override the number of games per lineup specified in `config.yaml`.
+*   `--num-games N` (Optional): Override the number of games per lineup for the **initial** permutation run (defaults to value in `config.yaml`).
+*   `--rerun TOP_N NUM_GAMES` (Optional): Manually trigger a rerun simulation for the `TOP_N` best-performing lineups found in the initial run, simulating `NUM_GAMES` for each. This overrides the `auto_rerun` settings in `config.yaml`. Example: `--rerun 20 5000` reruns the top 20 lineups for 5000 games each.
 *   `--debug` (Optional Flag): Enable DEBUG level console logging (stderr) for the orchestrator script itself.
 
 **How it works:**
@@ -160,10 +166,18 @@ Use `orchestrator.py` to automatically run simulations for batting order permuta
 *   Creates a timestamped directory for the run (e.g., `results/YYYYMMDD_HHMMSS/`).
 *   Generates the specified slice of permutations (using `--start` and `--stop`).
 *   For each permutation in the slice:
-    *   Calls `main.py --lineup ID1 ... ID9 --verbose False --output-dir results/YYYYMMDD_HHMMSS/ [--num-games N]` as a subprocess.
-    *   Captures the average score printed to *standard output* by `main.py`.
-    *   Writes the lineup permutation and its average score to `results/YYYYMMDD_HHMMSS/all_lineup_results.csv`.
+    *   Calls `main.py` as a subprocess with the lineup, the initial `num_games`, and the output directory.
+    *   Captures the average score printed to standard output by `main.py`.
+    *   Writes the lineup permutation and its average score to `results/YYYYMMDD_HHMMSS/[initial_num_games]_game_results.csv`.
 *   Logs progress to the console (stderr).
+*   **Auto-Rerun (Optional):**
+    *   If `auto_rerun` is `True` in `config.yaml` or `--rerun` is specified:
+        *   Reads the initial results CSV file.
+        *   Identifies the top `rerun_top_n` lineups based on `AverageScore`.
+        *   For each of these top lineups:
+            *   Calls `main.py` again as a subprocess with the lineup, the `rerun_num_games`, and the output directory.
+            *   Captures the new average score.
+            *   Writes the lineup and its new average score to `results/YYYYMMDD_HHMMSS/[rerun_num_games]_game_results.csv`.
 
 **To Run:**
 
@@ -179,15 +193,20 @@ Use `orchestrator.py` to automatically run simulations for batting order permuta
     ```bash
     python orchestrator.py --start 1000 --stop 2000
     ```
-*   **Run all permutations, but only simulate 50 games per lineup:**
+*   **Run all permutations, simulating 50 games per lineup initially:**
     ```bash
     python orchestrator.py --num-games 50
+    ```
+*   **Run all permutations (162 games default), then manually rerun the top 20 lineups for 1000 games each:**
+    ```bash
+    python orchestrator.py --rerun 20 1000
     ```
 
 **Output:**
 
-*   Results are saved in `results/YYYYMMDD_HHMMSS/all_lineup_results.csv` (where `YYYYMMDD_HHMMSS` corresponds to the run start time).
-*   Console output (stderr) shows progress for each lineup simulation.
+*   Initial results are saved in `results/YYYYMMDD_HHMMSS/[initial_num_games]_game_results.csv`.
+*   If a rerun is performed, those results are saved in `results/YYYYMMDD_HHMMSS/[rerun_num_games]_game_results.csv`.
+*   Console output (stderr) shows progress for each lineup simulation in both phases.
 
 **WARNING**: Running the orchestrator script for all permutations will **take a very long** time as it simulates `num_permutations` * `num_games` (e.g., 362,880 * 162 = nearly 59 million games). Use `--start`/`--stop` and consider reducing `num_games` (either in config or via `--num-games`) for testing.
 
@@ -199,11 +218,9 @@ Use `orchestrator.py` to automatically run simulations for batting order permuta
 
 **General ToDo**
    *   Implement stealing
-   *   Ability to auto-rerun N `num_games` (i.e. 100k) for top M batting orders (i.e. 1000)
-   *   Rename `all_lineup_results.csv` to `162game_results.csv`, where 162 is replaced by however many number of games in the simulation or associated rerun
-   *   Periodic updates on time progressed
+   *   Periodic progress updates during long orchestrator runs (e.g., time elapsed/remaining estimate).
    *   Create simple web interface for website use
-   *   Modify indicies for weighted baserunner outs
+   *   (Consider) Modify indices for weighted baserunner outs (index at 0 instead of -1)
    *   Probability parameter(s) for scoring on sac flies
    *   Upon completion, orchestrator should call a visual-generator script that will dump plots into the appropriate results folder. Argument flag to call plotter
    *   Create Roster in players.yaml. Roster is a subset of player IDs listed in Players (roster pool). The "roster" is the specific subset of players that will be permutated. Roster can contain more than 9 players, but fails if at least 9 unique IDs are not listed. Important to cross-check roster with player list before running program.

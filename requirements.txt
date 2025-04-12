@@ -1,1 +1,2 @@
 PyYAML>=6.0
+pandas>=1.0 # For reading/sorting CSV results in orchestrator

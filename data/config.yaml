@@ -26,5 +26,9 @@ simulation_params:
 player_data_file: data/players.yaml
 
 # --- Orchestrator Specific Parameters ---
-# Placeholder for future orchestrator settings (e.g., multiprocessing cores)
-orchestrator_params: {}
+orchestrator_params:
+  # Auto-rerun settings (can be overridden by --rerun flag)
+  auto_rerun: False # Enable/disable automatic rerun after initial permutation simulation
+  rerun_top_n: 10   # Number of top permutations to rerun if auto_rerun is True
+  rerun_num_games: 1000 # Number of games to simulate for each top permutation during rerun
+  # Placeholder for future settings (e.g., multiprocessing cores)
