@@ -53,28 +53,60 @@ class Game:
         self.log_event(f"\n--- Inning {self.inning} --- Score: {self.score}, Outs: {self.outs}", level=logging.INFO)
 
         while self.outs < 3:
+            # --- Announce Batter ---
             batter = self.lineup[self.current_batter_index]
             outs_before_pa = self.outs
-            # Store base state BEFORE the play resolves for calculations
-            bases_before_pa = list(self.bases) # Shallow copy is fine
+            bases_before_pa_announcement = list(self.bases) # State before steals/PA
+            self.log_event(f"\nBatter: {batter.name} ({batter.id}), Outs: {outs_before_pa}, Bases: {self._get_base_runners_str(bases_before_pa_announcement)}", level=logging.INFO)
 
-            self.log_event(f"\nBatter: {batter.name} ({batter.id}), Outs: {outs_before_pa}, Bases: {self._get_base_runners_str(bases_before_pa)}", level=logging.DEBUG)
+            # --- Check for Steals DURING Plate Appearance (after announcement) ---
+            # Iterate through bases that could have steal attempts (1st, 2nd)
+            # Process 2nd base first to avoid advancing a runner from 1st then checking them again at 2nd in same step
+            for base_index in [SECOND_BASE, FIRST_BASE]:
+                runner = self.bases[base_index]
+                if runner and self.outs < 3: # Check if runner exists and inning isn't over
+                    target_base = base_index + 1
+                    # Check if target base is open (no stealing into an occupied base)
+                    # Note: No stealing home (target_base == HOME_PLATE)
+                    if target_base < HOME_PLATE and self.bases[target_base] is None:
+                        # Check steal attempt probability
+                        if random.random() < runner.prob_steal_attempt:
+                            # Attempting steal
+                            if random.random() < runner.prob_steal_success:
+                                # Successful Steal (SB)
+                                self.log_event(f"STEAL: {runner.name} steals {target_base + 1}B!", level=logging.INFO)
+                                self.bases[target_base] = runner
+                                self.bases[base_index] = None # Vacate original base
+                            else:
+                                # Caught Stealing (CS)
+                                self.outs += 1
+                                self.log_event(f"CAUGHT STEALING: {runner.name} caught stealing {target_base + 1}B. Outs: {self.outs}", level=logging.INFO)
+                                self.bases[base_index] = None # Runner is out
+                                # Check if this was the 3rd out
+                                if self.outs >= 3:
+                                    self.log_event(f"Inning ends on caught stealing.", level=logging.DEBUG)
+                                    break # Exit steal check loop for this PA
 
+            # If inning ended on CS, continue to end the inning processing below
+            if self.outs >= 3:
+                 self.log_event(f"--- End of Inning {self.inning} --- Outs: {self.outs}, Score: {self.score}", level=logging.INFO)
+                 break # Break main while loop
+
+            # --- Simulate PA Outcome ---
+            # Use the base state *before* steals for process_outcome logic (DP/FC setup)
             outcome = self.simulate_plate_appearance(batter)
-            self.log_event(f"Outcome: {outcome}", level=logging.DEBUG)
+            self.log_event(f"PA Outcome: {outcome}", level=logging.INFO)
 
             # --- Process Outcome: Determine Outs and Immediate Placement ---
-            # This section determines WHO is out and increments self.outs
-            # It does NOT handle advancing runners yet.
-            self.process_outcome(batter, outcome, bases_before_pa)
+            # Modifies self.outs and potentially self.bases (if runner out on DP/FC)
+            # Returns True if the batter reached safely on an FC where a runner was out.
+            batter_safe_on_fc = self.process_outcome(batter, outcome, bases_before_pa_announcement)
 
             # --- Handle Baserunning ---
-            # This section advances runners based on the outcome and outs
-            # Ensures no runs score on 3rd out of inning.
+            # Uses the base state *after* steals and *after* process_outcome removed any outed runners.
             if self.outs < 3: # Only advance runners if inning is not over
-                 self.handle_baserunning(batter, outcome, bases_before_pa, outs_before_pa)
+                 self.handle_baserunning(batter, outcome, list(self.bases), outs_before_pa, batter_safe_on_fc)
             else:
-                 # If the play resulted in the 3rd out (or more), ensure no trailing runners score
                  self.log_event("Inning ends on the play.", level=logging.DEBUG)
 
 
@@ -105,8 +137,10 @@ class Game:
     def process_outcome(self, batter, outcome, bases_before_pa):
         """
         Determines outs, updates self.outs, handles immediate batter/runner removal for outs.
+        Returns True if the batter is safe due to a Fielder's Choice where a runner was out, False otherwise.
         Does NOT handle runner advancement for hits/walks or non-out runners.
         """
+        batter_safe_on_fc = False # Initialize return value
         runners_on_before_pa = [i for i, player in enumerate(bases_before_pa) if player is not None]
         num_runners_on = len(runners_on_before_pa)
 
@@ -116,100 +150,106 @@ class Game:
         elif outcome == WALK or outcome == HIT_BY_PITCH:
             # No outs on these unless weird scenario (not modeled)
             self.log_event(f"{batter.name} draws a {outcome}.", level=logging.INFO)
-            # Batter placement and runner advancement handled in handle_baserunning
             pass
         elif outcome in [SINGLE, DOUBLE, TRIPLE, HOME_RUN]:
             # No outs on these unless baserunning mistake (not modeled)
             self.log_event(f"{batter.name} hits a {outcome}!", level=logging.INFO)
-            # Batter placement and runner advancement handled in handle_baserunning
             pass
         elif outcome == FLY_OUT:
             self.outs += 1
             self.log_event(f"{batter.name} flies out.", level=logging.INFO)
-            # Runner advancement (tagging) handled in handle_baserunning
         elif outcome == GROUND_OUT:
             # --- Ground Out Logic: Check for DP, FC, or standard GO ---
             is_dp = False
             is_fc = False
 
-            # Check for Double Play potential
-            if self.outs < 2 and num_runners_on > 0:
+            # Determine if a force play exists at 2B, 3B based on runners_on_before_pa
+            force_at_2b = (FIRST_BASE in runners_on_before_pa)
+            force_at_3b = (FIRST_BASE in runners_on_before_pa and SECOND_BASE in runners_on_before_pa)
+            is_force_possible = force_at_2b or force_at_3b # A force exists if 1B is occupied
+
+            # Check for Double Play potential first (requires force and < 2 outs)
+            if self.outs < 2 and is_force_possible:
                  dp_prob = self.sim_params.get('dp_attempt_probability_on_go', 0.0)
                  if random.random() < dp_prob:
                     is_dp = True
+                    # Important: Only increment outs here, removal happens in handle_baserunning
+                    # based on the final state after DP resolution.
+                    # However, we need to decide *which* runner is out *now* to mark them.
                     self.outs += 2
                     self.log_event(f"{batter.name} grounds into a double play!", level=logging.INFO)
-                    # Batter is always out in our DP model
-                    self.log_event(f" -> Batter {batter.name} is out.", level=logging.DEBUG)
+                    self.log_event(f" -> Batter {batter.name} is out.", level=logging.DEBUG) # Batter always out
 
                     # Choose which runner is out
-                    possible_runners_out = [idx for idx in runners_on_before_pa] # Base indices 0, 1, 2
+                    possible_runners_out = []
+                    if force_at_2b: possible_runners_out.append(FIRST_BASE)
+                    if force_at_3b: possible_runners_out.append(SECOND_BASE)
+
                     if possible_runners_out:
                         weights_map = self.sim_params.get('double_play_runner_out_weights', {})
-                        runner_weights = [weights_map.get(idx, 1) for idx in possible_runners_out] # Default weight 1 if base not in config
+                        runner_weights = [weights_map.get(idx, 1) for idx in possible_runners_out]
 
                         if sum(runner_weights) > 0:
                              runner_out_idx = random.choices(possible_runners_out, weights=runner_weights, k=1)[0]
                              runner_out_player = bases_before_pa[runner_out_idx]
-                             self.log_event(f" -> Runner {runner_out_player.name} ({runner_out_player.id}) is out at base {runner_out_idx + 1}.", level=logging.DEBUG)
-                             # Remove the runner from the current state immediately
-                             self.bases[runner_out_idx] = None
+                             self.log_event(f" -> Runner {runner_out_player.name} ({runner_out_player.id}) is out attempting to advance.", level=logging.DEBUG)
+                             self.bases[runner_out_idx] = None # Mark runner as out *now*
                         else:
-                            logger.warning("DP occurred but runner weights summed to zero. Randomly choosing runner out.")
+                            logger.warning("DP occurred but runner weights summed to zero. Randomly choosing forced runner out.")
                             runner_out_idx = random.choice(possible_runners_out)
                             runner_out_player = bases_before_pa[runner_out_idx]
-                            self.log_event(f" -> Runner {runner_out_player.name} ({runner_out_player.id}) (randomly chosen) is out at base {runner_out_idx + 1}.", level=logging.DEBUG)
+                            self.log_event(f" -> Runner {runner_out_player.name} ({runner_out_player.id}) (randomly chosen) is out attempting to advance.", level=logging.DEBUG)
                             self.bases[runner_out_idx] = None
                     else:
-                        # This case (DP with no runners) shouldn't happen based on check above, but safety
-                        logger.warning("DP attempt logic triggered with no runners on base.")
-                        self.outs -= 1 # Correct outs back to 1 if DP was wrongly assumed
+                         logger.error("DP logic error: Force possible but no runners identified.")
+                         self.outs -=1 # Revert one out
 
-
-            # Check for Fielder's Choice (if not a DP and runners were on)
-            elif self.outs < 3 and num_runners_on > 0:
+            # Fielder's Choice (if not a DP and a force play was possible)
+            elif self.outs < 3 and is_force_possible:
                  is_fc = True
                  self.outs += 1
                  self.log_event(f"{batter.name} grounds into a fielder's choice.", level=logging.INFO)
 
-                 # Determine who is out (batter or one of the runners)
-                 fc_options = {BATTER_INDEX: batter} # Batter is index -1
-                 for idx in runners_on_before_pa:
-                     fc_options[idx] = bases_before_pa[idx]
+                 # Determine who is out (batter or one of the runners involved in the force)
+                 fc_options = {BATTER_INDEX: batter}
+                 if force_at_2b: fc_options[FIRST_BASE] = bases_before_pa[FIRST_BASE]
+                 if force_at_3b: fc_options[SECOND_BASE] = bases_before_pa[SECOND_BASE]
 
                  option_indices = list(fc_options.keys())
                  weights_map = self.sim_params.get('fielders_choice_out_weights', {})
                  option_weights = [weights_map.get(idx, 1) for idx in option_indices]
 
+                 out_player_idx = BATTER_INDEX
                  if sum(option_weights) > 0:
                       out_player_idx = random.choices(option_indices, weights=option_weights, k=1)[0]
                  else:
-                      logger.warning("FC weights summed to zero. Randomly choosing player out.")
-                      out_player_idx = random.choice(option_indices)
+                      logger.warning("FC weights summed to zero or options invalid. Randomly choosing player out from options.")
+                      if option_indices: out_player_idx = random.choice(option_indices)
+                      else: logger.error("FC logic error: No options to choose from."); self.outs -= 1; is_fc = False
 
-                 out_player = fc_options[out_player_idx]
-                 self.log_event(f" -> {out_player.name} ({out_player.id}) is out.", level=logging.DEBUG)
+                 if is_fc:
+                     out_player = fc_options[out_player_idx]
+                     self.log_event(f" -> {out_player.name} ({out_player.id}) is out.", level=logging.DEBUG)
+                     if out_player_idx != BATTER_INDEX:
+                          self.bases[out_player_idx] = None # Mark runner as out *now*
+                          batter_safe_on_fc = True # Batter is safe
 
-                 if out_player_idx != BATTER_INDEX: # A runner was out
-                      # Remove the runner immediately
-                      self.bases[out_player_idx] = None
-                      # Batter is safe on FC, placed later in handle_baserunning
-                 # else: Batter was out, handled implicitly (no placement later)
-
-            # Standard Ground Out (no runners, or after DP/FC resolved)
-            if not is_dp and not is_fc:
+            # Standard Ground Out (only if not DP and no force was possible)
+            elif not is_dp and not is_force_possible:
                  self.outs += 1
                  self.log_event(f"{batter.name} grounds out.", level=logging.INFO)
 
+        return batter_safe_on_fc
 
-    def handle_baserunning(self, batter, outcome, bases_before_pa, outs_before_pa):
+
+    def handle_baserunning(self, batter, outcome, current_bases_state, outs_before_pa, batter_safe_on_fc):
         """
         Handles advancement of runners AND the batter (if not out).
         Calculates runs scored, respecting the 3rd out rule.
-        Uses the state *before* the play (bases_before_pa) as starting point.
+        Uses the current base state (after steals, after outs from process_outcome) as the starting point.
         Updates self.bases and self.score.
         """
-        current_outs = self.outs # Outs *after* process_outcome finished
+        current_outs = self.outs # Use current outs count
         runs_scored_this_play = 0
         new_bases = [None] * 3 # Represents the target state AFTER advancement
 
@@ -233,40 +273,17 @@ class Game:
             batter_target_base = HOME_PLATE # Will score
             batter_is_safe = True # Scored
         elif outcome == GROUND_OUT:
-            # Batter might be safe *only* on a Fielder's Choice where a runner was out
-            # Need to reconstruct if FC occurred and batter wasn't chosen
-            # Check if outs increased by only 1 and runners were on
-            outs_this_play = current_outs - outs_before_pa
-            if outs_this_play == 1 and any(p is not None for p in bases_before_pa):
-                # Was the batter the one chosen in FC? We need to know that...
-                # This is tricky. Let's modify process_outcome slightly?
-                # Or assume if outs==1 and runners were on GO, it *was* FC and batter is safe *unless* process_outcome logged batter out.
-                # Simplification: Let's assume the log tells the story. If FC logged and batter wasn't logged out, batter is safe.
-                # This requires careful log reading or a better state passing mechanism.
-                # SAFER: Re-evaluate the FC choice logic based on who is *missing* from self.bases now vs bases_before_pa.
-                is_fc_where_runner_out = False
-                if any(p is not None for p in bases_before_pa) and outs_this_play == 1:
-                     # Check if a runner who was on bases_before_pa is now missing from self.bases
-                     runner_out_on_fc = None
-                     for idx, p_before in enumerate(bases_before_pa):
-                         if p_before is not None and self.bases[idx] is None:
-                             # Found a runner removed during process_outcome
-                             runner_out_on_fc = p_before
-                             break
-                     if runner_out_on_fc:
-                         is_fc_where_runner_out = True
-
-                if is_fc_where_runner_out:
-                    batter_target_base = FIRST_BASE
-                    batter_is_safe = True
-
+            # Batter is safe *only* if process_outcome determined it was an FC where a runner was out
+            if batter_safe_on_fc:
+                 batter_target_base = FIRST_BASE
+                 batter_is_safe = True
+            # Otherwise, batter is out (batter_is_safe remains False)
 
         # --- Create combined list/dict of runners to process (including batter if safe) ---
-        # Use a dictionary: {start_base_index: player} -> {-1: batter, 0: runner_on_1st, ...}
+        # Use the current_bases_state passed into the function (reflects steals and outs from process_outcome)
         runners_to_process = {}
-        for i, runner in enumerate(bases_before_pa):
-            # Include only runners who were NOT outed by process_outcome
-            if runner is not None and self.bases[i] is not None:
+        for i, runner in enumerate(current_bases_state):
+            if runner is not None: # Include all runners currently on base
                  runners_to_process[i] = runner
         if batter_is_safe:
             runners_to_process[BATTER_INDEX] = batter # -1 is batter's "start base"
@@ -279,110 +296,128 @@ class Game:
             is_batter = (start_base_idx == BATTER_INDEX)
             advance_amount = 0
             is_forced = False
+            took_extra_base = False # Reset XBP flag for each runner
 
             # --- Determine Base Advancement ---
             if is_batter:
                 advance_amount = batter_target_base - start_base_idx # e.g., 1B (0) - Batter (-1) = 1 base
             else: # Runner on base
                 # Check for Force Plays
-                # Forced if all bases between runner and batter (inclusive) were occupied *before* the play
-                # AND the batter reached base safely (or walked/HBP).
-                is_forced = False
-                if batter_is_safe and (outcome == WALK or outcome == HIT_BY_PITCH or outcome == SINGLE): # Only these force runners typically
-                    force_check_base = start_base_idx - 1
-                    is_forced = True # Assume forced unless a gap is found
-                    while force_check_base >= BATTER_INDEX:
-                        if force_check_base not in runners_to_process:
-                             # Check if the base was occupied *before* the PA, even if runner out on FC/DP
-                             if bases_before_pa[force_check_base] is None:
-                                is_forced = False
-                                break
-                        force_check_base -= 1
-
+                batter_causes_force = batter_is_safe and (outcome in [WALK, HIT_BY_PITCH, SINGLE] or (outcome == GROUND_OUT and batter_safe_on_fc))
+                if batter_causes_force:
+                    # Determine if *this specific runner* is forced
+                    is_forced = True # Assume forced
+                    check_base = start_base_idx - 1
+                    while check_base >= BATTER_INDEX:
+                        # Check if the base is occupied *now* (in runners_to_process)
+                        occupying_runner = runners_to_process.get(check_base, None)
+                        if occupying_runner is None:
+                            is_forced = False
+                            break
+                        check_base -= 1
 
                 if is_forced:
                     advance_amount = 1 # Standard force advance is 1 base
-                    self.log_event(f"Runner {runner.name} is forced to advance.", level=logging.DEBUG)
                 else:
                     # --- Non-Forced Advancement Rules ---
-                    if outcome in [SINGLE, DOUBLE, TRIPLE, HOME_RUN]:
-                         # Standard advance based on hit type for non-forced runners
-                         if outcome == SINGLE: advance_amount = 1
-                         elif outcome == DOUBLE: advance_amount = 2
-                         elif outcome == TRIPLE: advance_amount = 3
-                         elif outcome == HOME_RUN: advance_amount = 4 # Score
-
-                         # XBP Check for Singles/Doubles (discretionary extra base)
-                         if (outcome == SINGLE or outcome == DOUBLE):
-                              if random.random() < runner.extra_base_percentage:
-                                  self.log_event(f"Runner {runner.name} takes extra base on {outcome} (XBP).", level=logging.DEBUG)
-                                  advance_amount += 1
+                    standard_advance = 0
+                    if outcome == SINGLE: standard_advance = 1
+                    elif outcome == DOUBLE: standard_advance = 2
+                    elif outcome == TRIPLE: standard_advance = 3
+                    elif outcome == HOME_RUN: standard_advance = 4 # Score
                     elif outcome == FLY_OUT:
-                         # Tagging up
-                         if start_base_idx == THIRD_BASE and current_outs < 3: # Sac Fly condition
-                             self.log_event(f"Runner {runner.name} tags up from 3rd on fly out (Sac Fly).", level=logging.INFO)
-                             advance_amount = 1 # Scores
-                         elif current_outs < 3: # Tagging from 1st or 2nd
-                             if random.random() < runner.extra_base_percentage:
-                                  self.log_event(f"Runner {runner.name} tags up and advances on fly out (XBP).", level=logging.DEBUG)
-                                  advance_amount = 1
-                             else:
-                                  self.log_event(f"Runner {runner.name} holds on fly out.", level=logging.DEBUG)
-                                  advance_amount = 0
-                         else: # 3rd out made on the catch
-                              advance_amount = 0
-                    elif outcome == GROUND_OUT:
-                         # Non-forced runners on ground outs (inc. DP survivors, FC survivors)
+                         # Tagging up (Sac Fly or standard tag)
+                         if current_outs < 3: # Can only advance if not 3rd out
+                             if start_base_idx == THIRD_BASE: # Sac Fly
+                                 standard_advance = 1 # Scores
+                             else: # Tagging from 1st or 2nd
+                                 if random.random() < runner.extra_base_percentage:
+                                      standard_advance = 1
+                                      took_extra_base = True # Indicate tag up advance
+                    elif outcome == GROUND_OUT: # Includes FC survivors, DP survivors
+                         # Non-forced runners on ground outs generally hold unless XBP dictates otherwise
                          if current_outs < 3:
                              if random.random() < runner.extra_base_percentage:
-                                  self.log_event(f"Runner {runner.name} advances on ground out (XBP).", level=logging.DEBUG)
-                                  advance_amount = 1
-                             else:
-                                  self.log_event(f"Runner {runner.name} holds on ground out.", level=logging.DEBUG)
-                                  advance_amount = 0
-                         else: # 3rd out made on the play
-                              advance_amount = 0
-                    # Default: No advance on SO, Walk, HBP if not forced
-                    else:
-                         advance_amount = 0
+                                  standard_advance = 1
+                                  took_extra_base = True # Indicate advance on contact
+
+                    advance_amount = standard_advance
+
+                    # XBP Check for non-forced runners on Singles/Doubles
+                    # Only apply if runner wouldn't score automatically with standard advance
+                    potential_target_std = start_base_idx + standard_advance
+                    if potential_target_std < HOME_PLATE:
+                        # Apply XBP check only if not forced and outcome allows potential extra base
+                        if not is_forced and outcome in [SINGLE, DOUBLE]:
+                             if random.random() < runner.extra_base_percentage:
+                                 advance_amount += 1
+                                 took_extra_base = True
+                        # Note: took_extra_base flag is already set for tag-up/contact advances above
 
             # --- Calculate Target Base and Handle Placement/Scoring ---
             target_base = start_base_idx + advance_amount
+            runner_placed = False # Track if runner was successfully placed
+            log_suffix = " (XB)" if took_extra_base else "" # Suffix for logging extra bases
 
             if target_base >= HOME_PLATE: # Score
-                # **** CRITICAL: Check if this run scores before the 3rd out ****
                 if current_outs < 3:
                     runs_scored_this_play += 1
-                    self.log_event(f"Run scores! {runner.name} crosses the plate. Score now {self.score + runs_scored_this_play}.", level=logging.INFO)
-                    # Don't place runner on a base
+                    # Log score, include Sac Fly note if applicable
+                    sac_fly_note = " on Sac Fly" if outcome == FLY_OUT and start_base_idx == THIRD_BASE else ""
+                    # Don't log batter scoring separately if HR
+                    if not (is_batter and outcome == HOME_RUN):
+                        self.log_event(f"RUN SCORES: {runner.name} scores{sac_fly_note}. Score: {self.score + runs_scored_this_play}", level=logging.INFO)
+                    runner_placed = True # Considered 'placed' by scoring
                 else:
-                    self.log_event(f"Runner {runner.name} crosses plate, but after 3rd out. No run.", level=logging.DEBUG)
-            elif target_base >= FIRST_BASE: # Place on 1B, 2B, or 3B
+                    # Don't log batter not scoring on HR after 3rd out
+                    if not (is_batter and outcome == HOME_RUN):
+                        self.log_event(f"Runner {runner.name} crosses plate, but after 3rd out. No run.", level=logging.DEBUG)
+                    runner_placed = True # Still 'handled', just didn't score
+
+            elif target_base >= FIRST_BASE: # Advance to 1B, 2B, or 3B
+                 # Do not log batter advancement here, only runners
+                 log_advancement = not is_batter
+
                  if new_bases[target_base] is None:
                      new_bases[target_base] = runner
+                     # Only log advancement for non-batters
+                     if log_advancement: self.log_event(f"Runner {runner.name} advances to {target_base + 1}B{log_suffix}.", level=logging.DEBUG)
+                     runner_placed = True
                  else:
-                     # Base occupied by lead runner, hold up at base behind
+                     # Base occupied by lead runner, hold up at base behind it
                      fallback_base = target_base - 1
-                     if fallback_base >= FIRST_BASE:
-                         if new_bases[fallback_base] is None:
-                             new_bases[fallback_base] = runner
-                             self.log_event(f"Runner {runner.name} held up, stops at {fallback_base + 1}B.", level=logging.DEBUG)
-                         else:
-                             # Fallback also occupied? Stay put? Log warning.
-                             # If original base is available, stay there.
-                             if start_base_idx >= FIRST_BASE and new_bases[start_base_idx] is None:
-                                 new_bases[start_base_idx] = runner
-                                 self.log_event(f"Runner {runner.name} blocked, retreats/holds at {start_base_idx + 1}B.", level=logging.DEBUG)
-                             else:
-                                 logger.warning(f"Runner {runner.name} blocked at {target_base+1}B and fallback {fallback_base+1}B. Cannot place runner cleanly.")
-                                 # Runner effectively disappears in this simple model if truly blocked
-                     elif start_base_idx >= FIRST_BASE and new_bases[start_base_idx] is None:
-                         # Cannot advance (target was 1B, fallback is 0), stay at start if possible
-                         new_bases[start_base_idx] = runner
-                         self.log_event(f"Runner {runner.name} cannot advance from {start_base_idx+1}B, stays.", level=logging.DEBUG)
+                     # Check fallback base
+                     if fallback_base >= FIRST_BASE and new_bases[fallback_base] is None:
+                         new_bases[fallback_base] = runner
+                         if log_advancement: self.log_event(f"Runner {runner.name} held up by lead runner, stops at {fallback_base + 1}B.", level=logging.DEBUG)
+                         runner_placed = True
                      else:
-                         logger.warning(f"Runner {runner.name} from {start_base_idx+1}B blocked at {target_base+1}B, cannot retreat/stay. Base state issue?")
-            # else: target_base < 0, runner doesn't reach base (shouldn't happen for safe runners)
+                         # Fallback also occupied or invalid? Blocked. Stay put if possible.
+                         if start_base_idx >= FIRST_BASE and new_bases[start_base_idx] is None:
+                             new_bases[start_base_idx] = runner
+                             if log_advancement: self.log_event(f"Runner {runner.name} blocked ahead, retreats/holds at {start_base_idx + 1}B.", level=logging.DEBUG)
+                             runner_placed = True
+                         else: # Cannot stay at original base either
+                             if log_advancement: logger.warning(f"Runner {runner.name} blocked at {target_base+1}B and fallback/original. Cannot place runner cleanly.")
+                             runner_placed = True # Handled (by being removed implicitly)
+
+            # If runner didn't advance (target_base == start_base_idx) and wasn't placed yet
+            if not runner_placed and target_base == start_base_idx and start_base_idx >= FIRST_BASE:
+                 # Ensure they stay on their original base if it's still available in new_bases
+                 if new_bases[start_base_idx] is None:
+                     new_bases[start_base_idx] = runner
+                     # Only log hold if not the batter
+                     if log_advancement: self.log_event(f"Runner {runner.name} holds at {start_base_idx + 1}B.", level=logging.DEBUG)
+                     runner_placed = True
+                 # else: Original base now occupied by trailing runner? Should be rare. Log if happens.
+                 elif new_bases[start_base_idx] != runner and log_advancement:
+                      logger.warning(f"Runner {runner.name} held position {start_base_idx+1}B, but it was taken by {new_bases[start_base_idx].id}. State issue?")
+                      runner_placed = True # Implicitly removed
+
+            # If runner was batter and wasn't placed (e.g., out or blocked)
+            if not runner_placed and is_batter:
+                 # Batter was out or couldn't be placed, already handled/logged.
+                 pass
 
         # --- Update Game State ---
         self.bases = new_bases
@@ -392,10 +427,11 @@ class Game:
     def _get_base_runners_str(self, bases_to_use):
         """Helper to get a string representation of base runners from a given base list."""
         base_strs = []
-        if bases_to_use[THIRD_BASE]:
-            base_strs.append(f"3B: {bases_to_use[THIRD_BASE].id}")
-        if bases_to_use[SECOND_BASE]:
-            base_strs.append(f"2B: {bases_to_use[SECOND_BASE].id}")
+        # Iterate in order 1B, 2B, 3B
         if bases_to_use[FIRST_BASE]:
             base_strs.append(f"1B: {bases_to_use[FIRST_BASE].id}")
+        if bases_to_use[SECOND_BASE]:
+            base_strs.append(f"2B: {bases_to_use[SECOND_BASE].id}")
+        if bases_to_use[THIRD_BASE]:
+            base_strs.append(f"3B: {bases_to_use[THIRD_BASE].id}")
         return ", ".join(base_strs) if base_strs else "Bases empty"

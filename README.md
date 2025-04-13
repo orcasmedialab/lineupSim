@@ -7,7 +7,8 @@ This project simulates baseball games for a single team based on detailed player
 *   Simulates games inning by inning for a 9-player lineup.
 *   Calculates Plate Appearance outcome probabilities (1B, 2B, 3B, HR, BB, HBP, SO, Ground Out, Fly Out) based on input stats.
 *   Distinguishes between Ground Outs (GO) and Fly Outs (FO) based on player GB/FB ratios.
-*   Models complex baserunning scenarios, including Forced Advances, Double Plays (DP), Fielder's Choice (FC), Sacrifice Flies, Extra Base Advancement, Base Traffic
+*   Models complex baserunning scenarios, including Forced Advances, Double Plays (DP), Fielder's Choice (FC), Sacrifice Flies, Extra Base Advancement, Base Traffic.
+*   Simulates potential Stolen Base (SB) attempts and Caught Stealing (CS) events based on calculated player probabilities before each plate appearance.
 *   Simulates a configurable number of games per run (defined in `data/config.yaml`, can be overridden via `--num-games` flag).
 *   Flexible output options:
 *   **Logging:**
@@ -214,10 +215,10 @@ Use `orchestrator.py` to automatically run simulations for batting order permuta
 
 *   This simulation focuses solely on the batting team's performance. Opposing pitching and defense are not dynamically factored-in beyond the assumed league-average outcomes reflected in the input player stats.
 
-*   Baserunning logic, while enhanced, still simplifies some situations (e.g., no explicit modeling of runner speed differences beyond XBP, basic DP trigger logic, no hit-and-run, no simulation of SB/CS attempts during play).
+*   Baserunning logic, while enhanced, still simplifies some situations (e.g., no explicit modeling of runner speed differences beyond XBP, basic DP trigger logic, no hit-and-run). Stealing attempts (SB/CS) are simulated based on player stats *before* each plate appearance.
 
 **General ToDo**
-   *   Implement stealing
+   *   Reword "Player X is forced to advance"
    *   Periodic progress updates during long orchestrator runs (e.g., time elapsed/remaining estimate).
    *   Create simple web interface for website use
    *   (Consider) Modify indices for weighted baserunner outs (index at 0 instead of -1)
